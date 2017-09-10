@@ -1,10 +1,33 @@
 #!/usr/bin/env python3
 
-"""Test script for ferment and bake classes."""
+"""
+    Flask app to compute ferment times/temps for baking.
+"""
 
 import re
+import os
 import math
 from datetime import datetime, timedelta
+#from datetime.datetime import strptime
+
+from flask import Flask, request, session, g, redirect, url_for, abort, \
+     render_template, flash
+
+
+### FLASK
+app = Flask(__name__) # create the application instance
+app.config.from_object(__name__) # load config from this file
+
+# Load default config and override config from an environment variable
+
+#DATABASE=os.path.join(app.root_path, 'flaskr.db'),
+#USERNAME='admin',
+#PASSWORD='default'
+app.config.update(dict(
+    SECRET_KEY='test'
+))
+
+app.config.from_envvar('HALFBAKED_SETTINGS', silent=True)
 
 
 class Ferment:
@@ -89,7 +112,6 @@ class Ferment:
             c = double_temp / log(2)
         """
 
-        # new_time = old_time * exp( (inv_c) * (old_temp - new_temp))
         inv_c = math.log(2) / self.double_temp
         new_hours = self.hours * math.exp(inv_c * (self.temp - float(new_temp)))
         self.hours = new_hours
@@ -112,26 +134,61 @@ class Ferment:
             self.start_time = None
 
 
+    # Printing
+
+    def get_name_str(self):
+        """Return string of self.name."""
+        return 'Ferment "{}"'.format(self.name)
+
+    def get_time_str(self):
+        """Return string of self.time."""
+        return 'Time: \t{:.2f} hours'.format(self.hours)
+
+    def get_temp_str(self):
+        """Return string of self.temp."""
+        return 'Temp: \t{:.2f} C'.format(self.temp)
+
+    def get_start_str(self):
+        """Return string of self.start_time."""
+        if self.start_time is not None:
+            return 'Start: \t{:%a %H.%M}'.format(self.start_time)
+        else:
+            return 'Start: \tNone'
+
+    def get_end_str(self):
+        """Return string of self.get_end_time."""
+
+        if self.start_time is not None:
+            return 'End: \t{:%a %H.%M}'.format(self.get_end_time())
+        else:
+            return 'End: \tNone'
+
+    def get_double_time_str(self):
+        """Return string of self.double_time."""
+
+        return 'Temp change to double/halve time: {:.2f} C'\
+            .format(self.double_temp)
+
+
     def print_name(self):
-        """Print self.name."""
+        """Print name."""
 
-        print('Ferment "{}"'.format(self.name))
+        print(self.get_name_str())
 
 
-    def print_values(self, short=True):
+    def print_values(self, verbose=False):
         """Print all values."""
 
         self.print_name()
-        print('Time: \t{:.2f} hours'.format(self.hours))
-        print('Temp: \t{:.2f} C'.format(self.temp))
-        print('Start: \t{:%a %H.%M}'.format(self.start_time))
-        print('End: \t{:%a %H.%M}'.format(self.get_end_time()))
+        print(self.get_time_str())
+        print(self.get_temp_str())
 
-        if not short:
-            print(
-                'Temp change to double/halve time: {:.2f} C'\
-                .format(self.double_temp)
-                )
+        if self.start_time is not None:
+            print(self.get_start_str())
+            print(self.get_end_str())
+
+        if verbose:
+            print(self.get_double_time_str())
 
 
 
@@ -175,6 +232,19 @@ class Bake:
 
         for ferment_args in ferment_list:
             self.add_ferment(**ferment_args)
+
+
+    def get_args(self):
+        """Return dict of init args."""
+
+        init_args = {
+            'name': self.name,
+            'ferment_list': [
+                ferment.get_args() for ferment in self.ferments
+                ]
+            }
+
+        return init_args
 
 
     def add_ferment(self, index=None, **ferment_args):
@@ -244,37 +314,39 @@ class Bake:
 
         n_ferments = len(self.ferments)
 
-        # Search for not None start_time in ferments, starting with index
-        ref_index = None
-        for i in [index] + list(range(n_ferments)):
-            if self.ferments[i].start_time is not None:
-                ref_index = i
-                break
+        if n_ferments > 0:
+            # Search for not None start_time in ferments,
+            # starting with index
+            ref_index = None
+            for i in [index] + list(range(n_ferments)):
+                if self.ferments[i].start_time is not None:
+                    ref_index = i
+                    break
 
-        if ref_index is not None:
-            for i in range(ref_index+1, n_ferments):
-                # Set next_start_time = prev_end_time
-                start_time_i = self.ferments[i-1].get_end_time()
-                self.ferments[i].change_times(start_time_i)
+            if ref_index is not None:
+                for i in range(ref_index+1, n_ferments):
+                    # Set next_start_time = prev_end_time
+                    start_time_i = self.ferments[i-1].get_end_time()
+                    self.ferments[i].change_times(start_time_i)
 
-            for i in range(ref_index-1, -1, -1):
-                # Set prev_start_time = start_time - prev_hours
-                start_time_i = self.ferments[i+1].start_time \
-                    - timedelta(hours = self.ferments[i].hours)
-                self.ferments[i].change_times(start_time_i)
+                for i in range(ref_index-1, -1, -1):
+                    # Set prev_start_time = start_time - prev_hours
+                    start_time_i = self.ferments[i+1].start_time \
+                        - timedelta(hours = self.ferments[i].hours)
+                    self.ferments[i].change_times(start_time_i)
 
 
-    def change_time(
-            self, index, hours=None, start_time=None, end_time=None):
-        """Change start_time and/or hours of index ferment."""
 
-        if hours:
-            # Just change number of hours
-            self.ferments[index].change_hours(hours)
-        else:
-            # Change start_time (and hours if end_time is specified)
-            self.ferments[index].change_times(start_time, end_time)
+    def change_times(self, index, start_time=None, end_time=None):
+        """Change start_time of index ferment."""
+        # Change start_time (and hours if end_time is specified)
+        self.ferments[index].change_times(start_time, end_time)
+        self.sync_times(index)
 
+    def change_hours(self, index, hours):
+        """Change hours of index ferment."""
+
+        self.ferments[index].change_hours(hours)
         self.sync_times(index)
 
 
@@ -283,6 +355,22 @@ class Bake:
 
         self.ferments[index].change_temp(temp)
         self.sync_times(index)
+
+
+
+
+    # Printing
+
+    def get_name_str(self):
+        """Return string of self.name."""
+        return 'Bake "{}"'.format(self.name)
+
+
+    def get_ferment_name_str(self, ferment):
+        """Return string of self.name."""
+
+        index = self.ferment_index[ferment.name]
+        return '{}. {}'.format(index+1, ferment.get_name_str())
 
 
     def print_bake(self, verbose=True):
@@ -298,10 +386,124 @@ class Bake:
                 ferment.print_name()
 
 
+    def get_n_ferments(self):
+        """"""
+        return len(self.ferments)
 
+
+
+def html_strptime(s):
+    """"""
+    html_format = '%Y-%m-%dT%H:%M'
+    return datetime.strptime(s, html_format)
+
+# Store bake_args in flask session object
+# Recreate bake from these whenever needed
+
+
+@app.route('/', methods=['GET', 'POST'])
+def home():
+    """Home page."""
+
+    if request.method == 'POST':
+        bake_name = request.form['bake_name']
+        if request.form['create'] == 'Default':
+            session['bake_args'] = {'name': bake_name}
+        else:
+            session['bake_args'] = {
+                'ferment_list': [], 'name': bake_name
+                }
+        return redirect(url_for('bake'))
+    return render_template('home.html')
+
+
+@app.route('/bake', methods=['GET', 'POST'])
+def bake():
+    """Show bake."""
+
+    if not session.get('bake_args'):
+        return redirect(url_for('home'))
+
+    else:
+        bake = Bake(**session['bake_args'])
+        return render_template('bake.html', bake=bake)
+
+
+@app.route('/add/<index>', methods=['GET', 'POST'])
+def add(index):
+    """Add ferment."""
+
+    print('Add ferment at position {}'.format(index))
+
+    # TODO #
+
+    return redirect(url_for('bake'))
+
+
+@app.route('/edit/<ferment_name>', methods=['GET', 'POST'])
+def edit(ferment_name):
+    """Edit ferment."""
+
+    bake = Bake(**session['bake_args'])
+    ferment_index = bake.ferment_index[ferment_name]
+    ferment = bake.ferments[ferment_index]
+
+    if request.method == 'POST':
+        if request.form['add_or_cancel'] == 'Cancel':
+            return redirect(url_for('bake'))
+        else:
+
+            inputs = [
+                'ferment_temp', 'ferment_time', 'ferment_start',
+                'ferment_end'
+                ]
+            cast_funcs = [float, float, html_strptime, html_strptime]
+            values = {k:None for k in inputs}
+            casts = {k:f for k,f in zip(inputs, cast_funcs)}
+
+            for k in inputs:
+                val = request.form[k]
+                if len(val) > 0:
+                    values[k] = casts[k](val)
+
+            if values['ferment_temp'] is not None:
+                # Change temp
+                bake.change_temp(ferment_index, values['ferment_temp'])
+
+            if values['ferment_time'] is not None:
+                # Change hours
+                bake.change_hours(ferment_index, values['ferment_time'])
+
+            if (values['ferment_start'] is not None) \
+                or (values['ferment_end'] is not None):
+                # Then change times
+                bake.change_times(
+                    ferment_index, values['ferment_start'],
+                    values['ferment_end']
+                    )
+
+            session['bake_args'] = bake.get_args()
+            return redirect(url_for('bake'))
+
+
+    return render_template(
+        'edit_ferment.html', bake=bake, ferment=ferment
+        )
+
+
+@app.route('/delete/<ferment_name>', methods=['GET', 'POST'])
+def delete(ferment_name):
+    """Delete ferment."""
+
+    bake = Bake(**session['bake_args'])
+    bake.remove_ferment(bake.ferment_index[ferment_name])
+    session['bake_args'] = bake.get_args()
+
+    return redirect(url_for('bake'))
 
 
 ### TESTING ###
+
 
 # Use case: initialise with default bake
 # Allow to make changes until done, print each time
@@ -327,7 +529,7 @@ while not bake_is_done:
 
 
 
-
+'''
 tmp = Ferment(name='test', hours=8, temp=22)
 tmp.change_hours(16)
 tmp.change_hours(6)
@@ -357,7 +559,7 @@ bake.print_bake()
 
 
 #bake2 = Bake()
-
+'''
 
 
 '''
