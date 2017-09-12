@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+{% block body %}
+  <h1>{{ bake.get_name_str() }}</h1>
+  <a href="{{ url_for('add_ferment', ferment_index=0) }}">Add here</a>
+  {% if bake.get_n_ferments() > 0 %}
+    <ol>
+      {% for ferment in bake.ferments %}
+      <li>
+      <h2>Ferment "{{ ferment.get_name_str() }}"</h2>
+      <ul>
+        <li>Time: {{ ferment.get_time_str() }} (hours)</li>
+        <li>Temp: {{ ferment.get_temp_str() }} (C)</li>
+        <li>Start: {{ ferment.get_start_str() }}</li>
+        <li>End: {{ ferment.get_end_str() }}</li>
+      </ul>
+      <a href="{{ url_for('add_ferment', ferment_index=1+bake.ferment_index[ferment.name]) }}">
+        Add here
+      </a>
+      <a href="{{ url_for('edit_ferment', ferment_name=ferment.name) }}">
+        Edit
+      </a>
+      <a href="{{ url_for('delete_ferment', ferment_name=ferment.name) }}">
+        Delete
+      </a>
+      </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <em>No ferments.</em>
+  {% endif %}
+{% endblock %}

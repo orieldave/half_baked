@@ -56,13 +56,19 @@ class Ferment:
         """
 
         self.name = name
+        self.temp = float(temp)
+        self.double_temp = float(double_temp)
+
+        # Hours is either explicit or end_time - start_time
         if hours:
             self.hours = float(hours)
         else:
             self.hours = float((end_time - start_time).seconds/3600)
-        self.temp = float(temp)
-        self.double_temp = float(double_temp)
+
+        # Start is either expicit or end_time - hours
         self.start_time = start_time
+        if (start_time is None) and (end_time is not None):
+            self.start_time = end_time - timedelta(hours=hours)
 
 
     def get_args(self):
@@ -138,36 +144,35 @@ class Ferment:
 
     def get_name_str(self):
         """Return string of self.name."""
-        return 'Ferment "{}"'.format(self.name)
+        return '{}'.format(self.name)
 
     def get_time_str(self):
         """Return string of self.time."""
-        return 'Time: \t{:.2f} hours'.format(self.hours)
+        return '{:.2f}'.format(self.hours)
 
     def get_temp_str(self):
         """Return string of self.temp."""
-        return 'Temp: \t{:.2f} C'.format(self.temp)
+        return '{:.2f}'.format(self.temp)
 
     def get_start_str(self):
         """Return string of self.start_time."""
         if self.start_time is not None:
-            return 'Start: \t{:%a %H.%M}'.format(self.start_time)
+            return '{:%a %H.%M}'.format(self.start_time)
         else:
-            return 'Start: \tNone'
+            return 'None'
 
     def get_end_str(self):
         """Return string of self.get_end_time."""
 
         if self.start_time is not None:
-            return 'End: \t{:%a %H.%M}'.format(self.get_end_time())
+            return '{:%a %H.%M}'.format(self.get_end_time())
         else:
-            return 'End: \tNone'
+            return 'None'
 
     def get_double_time_str(self):
         """Return string of self.double_time."""
 
-        return 'Temp change to double/halve time: {:.2f} C'\
-            .format(self.double_temp)
+        return '{:.2f}'.format(self.double_temp)
 
 
     def print_name(self):
@@ -363,14 +368,14 @@ class Bake:
 
     def get_name_str(self):
         """Return string of self.name."""
-        return 'Bake "{}"'.format(self.name)
+        return '{}'.format(self.name)
 
 
     def get_ferment_name_str(self, ferment):
         """Return string of self.name."""
 
         index = self.ferment_index[ferment.name]
-        return '{}. {}'.format(index+1, ferment.get_name_str())
+        return '{}. Ferment "{}"'.format(index+1, ferment.get_name_str())
 
 
     def print_bake(self, verbose=True):
@@ -397,6 +402,7 @@ def html_strptime(s):
     html_format = '%Y-%m-%dT%H:%M'
     return datetime.strptime(s, html_format)
 
+
 # Store bake_args in flask session object
 # Recreate bake from these whenever needed
 
@@ -413,49 +419,81 @@ def home():
             session['bake_args'] = {
                 'ferment_list': [], 'name': bake_name
                 }
-        return redirect(url_for('bake'))
+        return redirect(url_for('show_bake'))
     return render_template('home.html')
 
 
-@app.route('/bake', methods=['GET', 'POST'])
-def bake():
+@app.route('/show_bake', methods=['GET', 'POST'])
+def show_bake():
     """Show bake."""
 
     if not session.get('bake_args'):
         return redirect(url_for('home'))
-
     else:
         bake = Bake(**session['bake_args'])
-        return render_template('bake.html', bake=bake)
+        return render_template('show_bake.html', bake=bake)
 
 
-@app.route('/add/<index>', methods=['GET', 'POST'])
-def add(index):
-    """Add ferment."""
+@app.route('/add_ferment/<int:ferment_index>', methods=['GET', 'POST'])
+def add_ferment(ferment_index):
+    """Add ferment at position <ferment_index>."""
 
-    print('Add ferment at position {}'.format(index))
+    # Create bake object from bake_args
+    bake = Bake(**session['bake_args'])
 
-    # TODO #
+    if request.method == 'POST':
+        if request.form['add_or_cancel'] == 'Cancel':
+            # Return to show_bake
+            return redirect(url_for('show_bake'))
+        else:
+            # Process inputs
+            inputs = [
+                'ferment_name', 'ferment_temp', 'ferment_time',
+                'ferment_start', 'ferment_end'
+                ]
+            cast_funcs = [str, float, float, html_strptime, html_strptime]
+            values = {k:None for k in inputs}
+            casts = {k:f for k,f in zip(inputs, cast_funcs)}
 
-    return redirect(url_for('bake'))
+            for k in inputs:
+                val = request.form[k]
+                if len(val) > 0:
+                    values[k] = casts[k](val)
 
+            bake.add_ferment(
+                ferment_index,
+                name=values['ferment_name'],
+                temp=values['ferment_temp'],
+                hours=values['ferment_time'],
+                start_time=values['ferment_start'],
+                end_time=values['ferment_end']
+                )
 
-@app.route('/edit/<ferment_name>', methods=['GET', 'POST'])
-def edit(ferment_name):
-    """Edit ferment."""
+            session['bake_args'] = bake.get_args()
+            return redirect(url_for('show_bake'))
 
+    return render_template(
+        'add_ferment.html', ferment_index=ferment_index
+        )
+
+@app.route('/edit_ferment/<ferment_name>', methods=['GET', 'POST'])
+def edit_ferment(ferment_name):
+    """Edit ferment <ferment_name>."""
+
+    # Create bake object from bake_args
     bake = Bake(**session['bake_args'])
     ferment_index = bake.ferment_index[ferment_name]
     ferment = bake.ferments[ferment_index]
 
     if request.method == 'POST':
         if request.form['add_or_cancel'] == 'Cancel':
-            return redirect(url_for('bake'))
+            # Return to show_bake
+            return redirect(url_for('show_bake'))
         else:
-
+            # Process inputs
             inputs = [
-                'ferment_temp', 'ferment_time', 'ferment_start',
-                'ferment_end'
+                'ferment_temp', 'ferment_time',
+                'ferment_start', 'ferment_end'
                 ]
             cast_funcs = [float, float, html_strptime, html_strptime]
             values = {k:None for k in inputs}
@@ -483,24 +521,27 @@ def edit(ferment_name):
                     )
 
             session['bake_args'] = bake.get_args()
-            return redirect(url_for('bake'))
-
+            return redirect(url_for('show_bake'))
 
     return render_template(
-        'edit_ferment.html', bake=bake, ferment=ferment
+        'edit_ferment.html', ferment=ferment
         )
 
 
-@app.route('/delete/<ferment_name>', methods=['GET', 'POST'])
-def delete(ferment_name):
+@app.route('/delete_ferment/<ferment_name>', methods=['GET', 'POST'])
+def delete_ferment(ferment_name):
     """Delete ferment."""
 
     bake = Bake(**session['bake_args'])
     bake.remove_ferment(bake.ferment_index[ferment_name])
     session['bake_args'] = bake.get_args()
 
-    return redirect(url_for('bake'))
+    return redirect(url_for('show_bake'))
 
+
+
+### TODO ###
+# Fix add_ferment issue that default args won't be used if arg given as None
 
 ### TESTING ###
 
