@@ -10,24 +10,22 @@ import math
 from datetime import datetime, timedelta
 #from datetime.datetime import strptime
 
-from flask import Flask, request, session, g, redirect, url_for, abort, \
-     render_template, flash
+from flask import Flask, request, session, redirect, \
+    url_for, render_template
 
 
 ### FLASK
 app = Flask(__name__) # create the application instance
 app.config.from_object(__name__) # load config from this file
 
-# Load default config and override config from an environment variable
-
-#DATABASE=os.path.join(app.root_path, 'flaskr.db'),
-#USERNAME='admin',
-#PASSWORD='default'
+# Load default config and override config from
+# environment variable pointing to file
 app.config.update(dict(
+    DEBUG=False,
     SECRET_KEY='test'
-))
+    ))
 
-app.config.from_envvar('HALFBAKED_SETTINGS', silent=True)
+app.config.from_envvar('HALFBAKED_CONFIG', silent=True)
 
 
 class Ferment:
@@ -223,7 +221,7 @@ class Bake:
         ]
 
 
-    def __init__(self, ferment_list=default_ferment_list, name=None):
+    def __init__(self, ferment_list=default_ferment_list, name=''):
         """Create bake object from list of ferment args for each stage.
 
         Args:
@@ -266,7 +264,9 @@ class Bake:
 
         # Add args from defaults if not in ferment_args
         for k, v in self.default_args.items():
-            if k not in ferment_args.keys():
+            if (k not in ferment_args.keys()) \
+                or (ferment_args[k] is None):
+
                 ferment_args[k] = v
 
         # Make ferment from ferment_args
@@ -539,15 +539,6 @@ def delete_ferment(ferment_name):
     return redirect(url_for('show_bake'))
 
 
-
-### TODO ###
-# Fix add_ferment issue that default args won't be used if arg given as None
-
-### TESTING ###
-
-
-# Use case: initialise with default bake
-# Allow to make changes until done, print each time
 
 '''
 bake_name = 'test'
