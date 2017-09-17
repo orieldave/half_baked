@@ -10,23 +10,12 @@ import math
 from datetime import datetime, timedelta
 #from datetime.datetime import strptime
 
+# Flask
 from flask import Flask, request, session, redirect, \
     url_for, render_template
 
 
-### FLASK
-app = Flask(__name__) # create the application instance
-app.config.from_object(__name__) # load config from this file
-
-# Load default config and override config from
-# environment variable pointing to file
-app.config.update(dict(
-    DEBUG=False,
-    SECRET_KEY='test'
-    ))
-
-app.config.from_envvar('HALFBAKED_CONFIG', silent=True)
-
+### CLASSES
 
 class Ferment:
     """Fermentation step for a specified time and temp.
@@ -173,11 +162,12 @@ class Ferment:
         return '{:.2f}'.format(self.double_temp)
 
 
+    ### TESTING ###
+
     def print_name(self):
         """Print name."""
 
         print(self.get_name_str())
-
 
     def print_values(self, verbose=False):
         """Print all values."""
@@ -361,8 +351,9 @@ class Bake:
         self.ferments[index].change_temp(temp)
         self.sync_times(index)
 
-
-
+    def get_n_ferments(self):
+        """"""
+        return len(self.ferments)
 
     # Printing
 
@@ -391,11 +382,7 @@ class Bake:
                 ferment.print_name()
 
 
-    def get_n_ferments(self):
-        """"""
-        return len(self.ferments)
-
-
+# Datetime helper functions
 
 def html_strptime(s):
     """"""
@@ -403,8 +390,94 @@ def html_strptime(s):
     return datetime.strptime(s, html_format)
 
 
-# Store bake_args in flask session object
-# Recreate bake from these whenever needed
+def strp_day_time(s):
+    """Take string in format '%a %H.%M', return datetime if possible.
+
+    Finds next date after current date with that day.
+    Eg. given 'fri 09.00', if today is Weds Jan 1st, returns Fri Jan 3rd.
+    """
+
+    day_format = '%a'
+    time_format = '%H.%M'
+    # Check if valid day and time
+    try:
+        _ = datetime.strptime(s, '{} {}'.format(day_format, time_format))
+        # This may have the wrong day of week, because will be 01-01-1900
+    except Exception as ee:
+        return None
+    # This is a valid day and time, but must find  a valid date
+    target_day, target_time = s.split()
+    target_hour, target_min = [
+        int(digits) for digits in target_time.split('.')
+        ]
+    # Current date
+    today = datetime.today()
+    today_time = datetime.strftime(today, time_format)
+    # Find first date of correct day on/after current date
+    if target_time >= today_time:
+        return_date = today
+    else:
+        return_date = today + timedelta(days=1)
+    # Set return time
+    return_date = return_date.replace(
+        hour=target_hour, minute=target_min, second=0, microsecond=0
+        )
+    # Find next date with correct day of week
+    while datetime.strftime(return_date, day_format).lower() \
+        != target_day.lower():
+        # Increment days until return_day == target_day
+        return_date = return_date + timedelta(days=1)
+
+    return return_date
+
+
+def parse_day_time_str(s):
+    """
+    Coerce string into '%a %H.%M' format, eg. 'mon 09.00', return datetime.
+
+    Splits string on spaces,
+    filters each word into 'day' and 'time' candidates,
+    attempts to convert these to datetimes using strp_day_time,
+    returns first not None match
+    else returns None.
+    """
+
+    days = []
+    times = []
+    l = s.split()
+    for word in l:
+        # Sub digits, then non-word, lower
+        word_day = re.sub('[^\w]', '', re.sub('\d', '', word))[:3]
+        if len(word_day) == 3:
+            days.append(word_day.lower())
+        # Sub non-digits
+        word_time = re.sub('[^\d]', '', word)[:4]
+        if len(word_time) == 4:
+            times.append('{}.{}'.format(word_time[:2], word_time[-2:]))
+
+    for day in days:
+        for time in times:
+            clean_day_time = '{} {}'.format(day, time)
+            day_time_date = strp_day_time(clean_day_time)
+            if day_time_date is not None:
+                return day_time_date
+    return None
+
+
+
+
+### FLASK
+app = Flask(__name__) # create the application instance
+app.config.from_object(__name__) # load config from this file
+
+# Load default config and override config from
+# environment variable pointing to file
+app.config.update(dict(
+    DEBUG=True,
+    SECRET_KEY='test'
+    ))
+
+app.config.from_envvar('HALFBAKED_CONFIG', silent=True)
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -451,7 +524,9 @@ def add_ferment(ferment_index):
                 'ferment_name', 'ferment_temp', 'ferment_time',
                 'ferment_start', 'ferment_end'
                 ]
-            cast_funcs = [str, float, float, html_strptime, html_strptime]
+            cast_funcs = [
+                str, float, float, parse_day_time_str, parse_day_time_str
+                ]
             values = {k:None for k in inputs}
             casts = {k:f for k,f in zip(inputs, cast_funcs)}
 
@@ -495,7 +570,9 @@ def edit_ferment(ferment_name):
                 'ferment_temp', 'ferment_time',
                 'ferment_start', 'ferment_end'
                 ]
-            cast_funcs = [float, float, html_strptime, html_strptime]
+            cast_funcs = [
+                float, float, parse_day_time_str, parse_day_time_str
+                ]
             values = {k:None for k in inputs}
             casts = {k:f for k,f in zip(inputs, cast_funcs)}
 
@@ -537,92 +614,3 @@ def delete_ferment(ferment_name):
     session['bake_args'] = bake.get_args()
 
     return redirect(url_for('show_bake'))
-
-
-
-'''
-bake_name = 'test'
-
-bake = Bake(name=bake_name)
-
-input_help = """
-    h -- help \
-    a <name> <index> -- add ferment \
-    r <name> -- remove ferment \
-    ...
-    """
-bake_is_done = False
-while not bake_is_done:
-
-    bake.print_bake()
-
-    action = raw_input('Enter: keyword [args]')
-'''
-
-
-
-'''
-tmp = Ferment(name='test', hours=8, temp=22)
-tmp.change_hours(16)
-tmp.change_hours(6)
-tmp.change_temp(30)
-
-tmp.change_times(datetime.today())
-tmp.change_times(datetime.today(), datetime.today() + timedelta(hours=8))
-tmp.change_times(datetime.today(), datetime.today() + timedelta(hours=4))
-
-bake = Bake()
-bake.add_ferment(**tmp.get_args())
-bake.add_ferment(index=-1, **tmp.get_args())
-
-
-bake.change_time(1, start_time=datetime.today())
-
-bake.add_ferment(index=2, **tmp.get_args())
-
-bake.remove_ferment(3)
-
-bake.remove_ferment(0)
-
-bake.change_temp(1, 10)
-bake.change_temp(1, 40)
-bake.print_bake()
-
-
-
-#bake2 = Bake()
-'''
-
-
-'''
-td_feed_starter = timedelta(hours=8)
-td_bulk = timedelta(hours
-td_shape = 'sat 22.30'
-td_bake = 'sun 10.30'
-
-# Inputs
-ts_feed_starter = 'sat 09.30'
-ts_refresh_starter = 'fri 09.30'
-ts_mix = 'sat 14.30'
-ts_shape = 'sat 22.30'
-ts_bake = 'sun 10.30'
-
-td_refresh_starter = timedelta(hours=24)
-
-def coerce_datetime_to_format(s):
-    """Split into str and num, str parsed as %a, num as %H%M, return string"""
-
-    # TODO
-
-    return s
-
-
-
-t_format = '%a %H.%M'
-
-t_feed_starter = strptime(ts_feed_starter, t_format)
-t_refresh_starter = t_feed_starter - td_refresh_starter
-
-
-ts_feed_starter = '09.30'
-'''

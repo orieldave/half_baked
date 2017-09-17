@@ -12,11 +12,14 @@
       <dd><input type="number" step="0.01" name="ferment_time"
         placeholder="{{ ferment.get_time_str() }}"></dd>
 
-      <dt>Start time (currently {{ ferment.get_start_str() }}):</dt>
-      <dd><input type="datetime-local" name="ferment_start"></dd>
 
-      <dt>End time (currently {{ ferment.get_end_str() }}):</dt>
-      <dd><input type="datetime-local" name="ferment_end"></dd>
+      <dt>Start time ('DDD HH.MM'):</dt>
+      <dd><input type="text" name="ferment_start"
+        placeholder="{{ ferment.get_start_str() }}"></dd>
+
+      <dt>End time ('DDD HH.MM'):</dt>
+      <dd><input type="text" name="ferment_end"
+        placeholder="{{ ferment.get_end_str() }}"></dd>
 
       <dd><input type="submit" name="add_or_cancel" value="Edit"></dd>
       <dd><input type="submit" name="add_or_cancel" value="Cancel"></dd>
