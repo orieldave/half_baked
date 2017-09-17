@@ -200,8 +200,7 @@ class Bake:
 
     # Defaults
     default_args = {
-        'temp': 20.0,
-        'double_temp' = 8.0
+        'temp': 20.0
         }
 
     default_ferment_list = [

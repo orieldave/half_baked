@@ -5,5 +5,4 @@ A time/temperature helper for baking bread.
 * Documentation (here and in app)
 * Add tests
 * Fix html/css aesthetics
-* Run on server
-* Features: default temp, read datetime as string?
+* Features: specify default room temp and double temp?
