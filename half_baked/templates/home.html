@@ -1,11 +1,17 @@
 {% extends "layout.html" %}
 {% block body %}
-  <h2>Home</h2>
+  <h2>Start a bake</h2>
+  <p>Letting bread rise for the right amount of time is crucial for a delicious bake. For bread yeast fermentation, an increase in temperature of approximately 8 C requires half as much ferment time; hence a change in one of these parameters must be accomodated by one in the other to keep the 'amount' of fermentation the same. This tool applies that constraint for you, helping you to bake on your schedule/climate.
+  <br><br>
+  A 'bake' here is a sequence of 'ferments' with specified time and temperature. Once a ferment has been created, you can change one of these parameters and the other will adjust, keeping the 'amount' of fermentation the same. You can also specify a start/end time to any of the ferments and all the others will sync up accordingly.</p>
   <form action="{{ url_for('home') }}" method="post">
     <dl>
-      <dt>Bake name:</dt>
-      <dd><input type="text" name="bake_name"></dd>
+      <dt>Give your bake a name and get started:</dt>
+      <dd><input type="text" name="bake_name"
+        placeholder="eg. myDeliciousBake"></dd>
+      <dt>Default sourdough sequence (tastes great with peanut butter):</dt>
       <dd><input type="submit" name="create" value="Default"></dd>
+      <dt>Empty bake (add your own damn ferments):</dt>
       <dd><input type="submit" name="create" value="Empty"></dd>
     </dl>
   </form>

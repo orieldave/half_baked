@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block body %}
   <h2>Add ferment at position {{ ferment_index }}"</h2>
+  <p>The time and temperature properties here will define the 'amount' of fermentation in this stage. Default room temperature will be used if temperature is omitted. Time can be specified in hours, start/end times or a combination thereof. If start/end times are given, all other ferments will be synced to these times.</p>
   <form action="{{ url_for('add_ferment', ferment_index=ferment_index) }}"
     method="post" class="add-entry">
     <dl>

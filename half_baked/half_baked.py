@@ -201,17 +201,17 @@ class Bake:
     # Defaults
     default_args = {
         'temp': 20.0,
+        'double_temp' = 8.0
         }
 
     default_ferment_list = [
-        {'name': 'refresh', 'hours': 24},
-        {'name': 'feed', 'hours': 8},
-        {'name': 'bulk', 'hours': 12},
-        {'name': 'proof', 'hours': 2}
+        {'name': 'refresh', 'hours': 24, 'temp': 20.0},
+        {'name': 'feed', 'hours': 8, 'temp': 20.0},
+        {'name': 'bulk', 'hours': 12, 'temp': 20.0},
+        {'name': 'proof', 'hours': 2, 'temp': 20.0}
         ]
 
-
-    def __init__(self, ferment_list=default_ferment_list, name=''):
+    def __init__(self, ferment_list=default_ferment_list, name=None):
         """Create bake object from list of ferment args for each stage.
 
         Args:
