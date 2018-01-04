@@ -498,16 +498,42 @@ def parse_day_time_str(s):
 
     days = []
     times = []
+    is_pm = False
     l = s.split()
-    for word in l:
+    for word in reversed(l):
+        # Search for 'day' string
         # Sub digits, then non-word, lower
         word_day = re.sub('[^\w]', '', re.sub('\d', '', word))[:3]
         if len(word_day) == 3:
             days.append(word_day.lower())
+        elif word_day.lower() == 'pm':
+            # Set 'PM' flag
+            is_pm = True
+
+        # Search for 'time' string
         # Sub non-digits
         word_time = re.sub('[^\d]', '', word)[:4]
-        if len(word_time) == 4:
-            times.append('{}.{}'.format(word_time[:2], word_time[-2:]))
+        if len(word_time) > 0:
+            if len(word_time) == 4:
+                # Assume format is '0930'
+                word_hour = word_time[:2]
+                word_min = word_time[2:]
+
+            elif len(word_time) == 3:
+                # Assume format is '[0]930'
+                word_hour = word_time[0]
+                word_min = word_time[1:]
+
+            else:
+                # Assume format is '12[00]'
+                word_hour = word_time
+                word_min = '00'
+
+            if is_pm and int(word_hour) > 0 and int(word_hour) < 12:
+                # Convert to 24hr
+                word_hour = str(int(word_hour) + 12)
+
+            times.append('{}.{}'.format(word_hour.zfill(2), word_min.zfill(2)))
 
     for day in days:
         for time in times:
