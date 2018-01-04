@@ -6,12 +6,16 @@
     method="post" class="add-entry">
     <dl>
       <dt>Temp (C):</dt>
-      <dd><input type="number" step="0.01" name="ferment_temp"
+      <dd><input type="number" step="1" name="ferment_temp"
         placeholder="{{ ferment.get_temp_str() }}"></dd>
 
       <dt>Time (hours):</dt>
-      <dd><input type="number" step="0.01" name="ferment_time"
+      <dd><input type="number" step="1" name="ferment_time"
         placeholder="{{ ferment.get_time_str() }}"></dd>
+
+      <dt>Inoculation (percent):</dt>
+      <dd><input type="number" step="1" name="ferment_inoc"
+        placeholder="{{ ferment.get_inoc_str() }}"></dd>
 
       <dt>Start time (eg. 'Mon 09.00'):</dt>
       <dd><input type="text" name="ferment_start"

@@ -18,7 +18,7 @@ from flask import Flask, request, session, redirect, \
 ### CLASSES
 
 class Ferment:
-    """Fermentation step for a specified time and temp.
+    """Fermentation step for a specified time, temp and inoculation.
 
     Time and temperature are fixed by the following formula:
         new_temp = old_temp - c * log(new_time / old_time)
@@ -27,17 +27,23 @@ class Ferment:
     and double_temp is therefore the increase/decrease in temperature
     required to halve/double the ferment time. Heuristically for bread,
     this is set at 8 C (17 F).
+
+    Time and inoculation (as a percentage) are fixed by the following formula:
+        new_time = old_time * (old_inoc / new_inoc)
+    such that a doubling in the inoculation percentage will halve the time.
     """
 
     # Defaults
     default_double_temp = 8.0
     default_temp = 20.0
+    default_inoc = 10.0
 
     def __init__(
             self, name, hours=None, start_time=None, end_time=None,
-            temp=default_temp, double_temp=default_double_temp):
+            temp=default_temp, double_temp=default_double_temp,
+            inoc=default_inoc):
         """
-        Init with time (in hours or start/end) and temp (C).
+        Init with time (in hours or start/end), temp (C) and inoculation (%).
 
         If hours is None, it is calculated from start/end times.
         """
@@ -45,6 +51,7 @@ class Ferment:
         self.name = name
         self.temp = float(temp)
         self.double_temp = float(double_temp)
+        self.inoc = float(inoc)
 
         # Hours is either explicit or end_time - start_time
         if hours:
@@ -66,7 +73,8 @@ class Ferment:
             'hours': self.hours,
             'start_time': self.start_time,
             'temp': self.temp,
-            'double_temp': self.double_temp
+            'double_temp': self.double_temp,
+            'inoc': self.inoc
             }
 
         return init_args
@@ -81,23 +89,34 @@ class Ferment:
             return None
 
 
-    def change_hours(self, new_hours):
-        """Change ferment time in hours, adjust temp accordingly.
+    def change_hours(self, new_hours, hold='inoc'):
+        """Change ferment time in hours, adjust temp or inoc accordingly.
 
         Temperature is set by:
             new_temp = old_temp - c * log(new_time / old_time)
         where
             c = double_temp / log(2)
+
+        Inoculation is set by:
+            new_inoc = old_inoc * (old_time / new_time)
         """
 
-        c = self.double_temp / math.log(2)
-        new_temp = self.temp - (c * math.log(float(new_hours) / self.hours))
-        self.temp = new_temp
+        if hold != 'temp':
+            # Adjust temperature, holding inoc
+            c = self.double_temp / math.log(2)
+            new_temp = self.temp - (c * math.log(float(new_hours) / self.hours))
+            self.temp = new_temp
+        else:
+            # Adjust inoculation, holding temp
+            new_inoc = self.inoc * (self.hours / new_hours)
+            self.inoc = new_inoc
+
+        # Adjust hours
         self.hours = float(new_hours)
 
 
-    def change_temp(self, new_temp):
-        """Change ferment temp in C, adjust time (in hours) accordingly.
+    def change_temp(self, new_temp, hold='inoc'):
+        """Change ferment temp in C, adjust time (in hours) or inoc accordingly.
 
         Time is set by:
             new_time = old_time * exp((old_temp - new_temp) / c)
@@ -105,19 +124,46 @@ class Ferment:
             c = double_temp / log(2)
         """
 
+        # Adjust hours, holding inoc
         inv_c = math.log(2) / self.double_temp
-        new_hours = self.hours * math.exp(inv_c * (self.temp - float(new_temp)))
+        old_hours = self.hours
+        new_hours = old_hours * math.exp(inv_c * (self.temp - float(new_temp)))
         self.hours = new_hours
         self.temp = float(new_temp)
 
+        if hold == 'hours':
+            # Change hours back to old_hours, holding temp
+            # This will adjust inoculation without an explicit formula
+            self.change_hours(old_hours, hold='temp')
 
-    def change_times(self, new_start_time=None, new_end_time=None):
+
+    def change_inoc(self, new_inoc, hold='temp'):
+        """Change inoculation percent, adjust hours or temp accordingly.
+
+        Time is set by:
+            new_time = old_time * (old_inoc / new_inoc)
+        """
+
+        # Adjust hours, holding temp
+        old_hours = self.hours
+        new_hours = old_hours * (self.inoc / float(new_inoc))
+        self.hours = new_hours
+        self.inoc = float(new_inoc)
+
+        if hold == 'hours':
+            # Change hours back to old_hours, holding inoc
+            # This will adjust temp without an explicit formula
+            self.change_hours(old_hours, hold='inoc')
+
+
+    def change_times(self, new_start_time=None, new_end_time=None, hold='inoc'):
         """Set start/end time. If both are given, change hours too."""
 
         if new_start_time:
             if new_end_time:
-                self.change_hours((new_end_time - new_start_time).seconds/3600)
-
+                self.change_hours(
+                    (new_end_time - new_start_time).seconds/3600, hold=hold
+                    )
             self.start_time = new_start_time
 
         elif new_end_time:
@@ -137,9 +183,13 @@ class Ferment:
         """Return string of self.time."""
         return '{:.2f}'.format(self.hours)
 
+    def get_inoc_str(self):
+        """Return string of self.inoc."""
+        return '{:.1f}'.format(self.inoc)
+
     def get_temp_str(self):
         """Return string of self.temp."""
-        return '{:.2f}'.format(self.temp)
+        return '{:.1f}'.format(self.temp)
 
     def get_start_str(self):
         """Return string of self.start_time."""
@@ -175,6 +225,7 @@ class Ferment:
         self.print_name()
         print(self.get_time_str())
         print(self.get_temp_str())
+        print(self.get_inoc_str())
 
         if self.start_time is not None:
             print(self.get_start_str())
@@ -192,10 +243,10 @@ class Bake:
     to ensure no gaps between stages.
 
     Default stages (at 20C):
-        1. Refresh (24 hours)
-        2. Feed (8 hours)
-        3. Bulk (12 hours)
-        4. Proof (2 hours)
+        1. Refresh (24 hours, 18 inoculation)
+        2. Feed (8 hours, 10 inoculation)
+        3. Bulk (12 hours, 15 inoculation)
+        4. Proof (2 hours, 100 inoculation)
     """
 
     # Defaults
@@ -204,10 +255,10 @@ class Bake:
         }
 
     default_ferment_list = [
-        {'name': 'refresh', 'hours': 24, 'temp': 20.0},
-        {'name': 'feed', 'hours': 8, 'temp': 20.0},
-        {'name': 'bulk', 'hours': 12, 'temp': 20.0},
-        {'name': 'proof', 'hours': 2, 'temp': 20.0}
+        {'name': 'refresh', 'hours': 24, 'temp': 20.0, 'inoc': 18},
+        {'name': 'feed', 'hours': 8, 'temp': 20.0, 'inoc': 10},
+        {'name': 'bulk', 'hours': 12, 'temp': 20.0, 'inoc': 15},
+        {'name': 'proof', 'hours': 2, 'temp': 20.0, 'inoc': 100}
         ]
 
     def __init__(self, ferment_list=default_ferment_list, name=None):
@@ -330,24 +381,28 @@ class Bake:
                     self.ferments[i].change_times(start_time_i)
 
 
-
-    def change_times(self, index, start_time=None, end_time=None):
+    def change_times(self, index, start_time=None, end_time=None, hold='inoc'):
         """Change start_time of index ferment."""
         # Change start_time (and hours if end_time is specified)
-        self.ferments[index].change_times(start_time, end_time)
+        self.ferments[index].change_times(start_time, end_time, hold=hold)
         self.sync_times(index)
 
-    def change_hours(self, index, hours):
+    def change_hours(self, index, hours, hold='inoc'):
         """Change hours of index ferment."""
 
-        self.ferments[index].change_hours(hours)
+        self.ferments[index].change_hours(hours, hold=hold)
         self.sync_times(index)
 
-
-    def change_temp(self, index, temp):
+    def change_temp(self, index, temp, hold='inoc'):
         """Change temp of index ferment."""
 
-        self.ferments[index].change_temp(temp)
+        self.ferments[index].change_temp(temp, hold=hold)
+        self.sync_times(index)
+
+    def change_inoc(self, index, inoc, hold='temp'):
+        """Change inoc of index ferment."""
+
+        self.ferments[index].change_inoc(inoc, hold=hold)
         self.sync_times(index)
 
     def get_n_ferments(self):
@@ -521,10 +576,10 @@ def add_ferment(ferment_index):
             # Process inputs
             inputs = [
                 'ferment_name', 'ferment_temp', 'ferment_time',
-                'ferment_start', 'ferment_end'
+                'ferment_inoc', 'ferment_start', 'ferment_end'
                 ]
             cast_funcs = [
-                str, float, float, parse_day_time_str, parse_day_time_str
+                str, float, float, float, parse_day_time_str, parse_day_time_str
                 ]
             values = {k:None for k in inputs}
             casts = {k:f for k,f in zip(inputs, cast_funcs)}
@@ -539,6 +594,7 @@ def add_ferment(ferment_index):
                 name=values['ferment_name'],
                 temp=values['ferment_temp'],
                 hours=values['ferment_time'],
+                inoc=values['ferment_inoc'],
                 start_time=values['ferment_start'],
                 end_time=values['ferment_end']
                 )
@@ -566,11 +622,11 @@ def edit_ferment(ferment_name):
         else:
             # Process inputs
             inputs = [
-                'ferment_temp', 'ferment_time',
+                'ferment_temp', 'ferment_time', 'ferment_inoc',
                 'ferment_start', 'ferment_end'
                 ]
             cast_funcs = [
-                float, float, parse_day_time_str, parse_day_time_str
+                float, float, float, parse_day_time_str, parse_day_time_str
                 ]
             values = {k:None for k in inputs}
             casts = {k:f for k,f in zip(inputs, cast_funcs)}
@@ -580,20 +636,35 @@ def edit_ferment(ferment_name):
                 if len(val) > 0:
                     values[k] = casts[k](val)
 
+            # Change one or more of temp, time, inoc, one at a time
+            # Hold the previously changed value fixed
+            # It only makes sense to change two of the three
+
+            # Default value to hold
+            hold = 'inoc'
+
+            if values['ferment_inoc'] is not None:
+                # Change inoculation (hold temp by default)
+                bake.change_inoc(ferment_index, values['ferment_inoc'], 'temp')
+                hold = 'inoc'
+
             if values['ferment_temp'] is not None:
                 # Change temp
-                bake.change_temp(ferment_index, values['ferment_temp'])
+                bake.change_temp(ferment_index, values['ferment_temp'], hold)
+                hold = 'temp'
 
             if values['ferment_time'] is not None:
                 # Change hours
-                bake.change_hours(ferment_index, values['ferment_time'])
+                bake.change_hours(ferment_index, values['ferment_time'], hold)
+                # Don't update 'hold' variable, in case start/end times are
+                # also changing
 
             if (values['ferment_start'] is not None) \
                 or (values['ferment_end'] is not None):
                 # Then change times
                 bake.change_times(
                     ferment_index, values['ferment_start'],
-                    values['ferment_end']
+                    values['ferment_end'], hold
                     )
 
             session['bake_args'] = bake.get_args()
