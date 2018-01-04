@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block body %}
   <h1>{{ bake.get_name_str() }}</h1>
-  <p>List of ferments in the bake. Their order and the 'amount' of fermentation of each is fixed. Changing one property (eg. increasing time) will result in the other being changed accordingly (eg. temperature will decrease). To change both properties you have to delete the current ferment and add a new one. Start/end times are synced automatically.</p>
+  <p>List of ferments in the bake. Their order and the 'amount' of fermentation of each is fixed. Changing one property (eg. increasing time) will result in another being changed accordingly (eg. temperature will decrease). Start/end times are synced automatically once a day and time has been specified.</p>
   <ul>
     <li><a href="{{ url_for('add_ferment', ferment_index=0) }}">
       Add here</a>
